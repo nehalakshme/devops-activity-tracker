@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DevOps Work Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Auth screen (shown until init decides; covers the app to avoid a flash) -->
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-brand"><span class="logo"><i data-lucide="server-cog"></i></span><h1>DevOps Work Tracker</h1></div>
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-mode="login">Log in</button>
+        <button type="button" class="auth-tab" data-mode="register">Register</button>
+      </div>
+      <form id="authForm" class="auth-form">
+        <input name="username" placeholder="username" autocomplete="username" required />
+        <input name="display_name" placeholder="display name" class="reg-only hidden" autocomplete="name" />
+        <input name="password" type="password" placeholder="password" autocomplete="current-password" required />
+        <div id="authError" class="auth-error hidden"></div>
+        <button type="submit" class="btn primary" id="authSubmit">Log in</button>
+      </form>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo"><i data-lucide="server-cog"></i></span>
+      <div>
+        <h1>DevOps Work Tracker</h1>
+        <span id="todayLabel" class="today"></span>
+      </div>
+    </div>
+
+    <button id="overdueBadge" class="overdue-badge hidden" title="View overdue tasks"></button>
+
+    <div class="searchwrap">
+      <input id="globalSearch" type="search" placeholder="Search… (try tag:postgres-staging)" autocomplete="off" />
+      <div id="searchResults" class="search-results hidden"></div>
+    </div>
+
+    <div class="user-area">
+      <span id="currentUserChip" class="user-chip"></span>
+      <button id="logoutBtn" class="btn" title="Log out">Logout</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="home"><i data-lucide="home"></i>Home</button>
+    <button class="tab" data-tab="checklist"><i data-lucide="list-checks"></i>Checklist</button>
+    <button class="tab" data-tab="tasks"><i data-lucide="clipboard-list"></i>Tasks</button>
+    <button class="tab" data-tab="pipelines"><i data-lucide="git-branch"></i>Pipelines</button>
+    <button class="tab" data-tab="maintenance"><i data-lucide="wrench"></i>Maintenance</button>
+    <button class="tab" data-tab="pocs"><i data-lucide="flask-conical"></i>POCs</button>
+    <button class="tab" data-tab="timeline"><i data-lucide="history"></i>Timeline</button>
+    <button class="tab" data-tab="graph"><i data-lucide="share-2"></i>Graph</button>
+    <button class="tab" data-tab="recurring"><i data-lucide="repeat"></i>Recurring</button>
+    <button class="tab" data-tab="tags"><i data-lucide="tag"></i>Tags</button>
+    <button class="tab" data-tab="tagsOverview"><i data-lucide="bar-chart-3"></i>Tag Overview</button>
+    <!-- Audit Log tab hidden for now (code intact). Remove the `hidden` class to re-enable. -->
+    <button class="tab hidden" data-tab="audit"><i data-lucide="scroll-text"></i>Audit Log</button>
+  </nav>
+
+  <main>
+    <!-- HOME -->
+    <section id="home" class="panel active">
+      <div id="homeHero" class="home-hero"></div>
+      <div id="homeStats" class="stats"></div>
+      <div id="homeBody"></div>
+    </section>
+
+    <!-- CHECKLIST -->
+    <section id="checklist" class="panel">
+      <div class="panel-head">
+        <h2>Daily Checklist</h2>
+        <div class="head-controls">
+          <input id="checklistDate" type="date" class="date-input" />
+          <span id="checklistProgress" class="pill">0/3 done</span>
+        </div>
+      </div>
+      <div id="checklistItems" class="checklist"></div>
+    </section>
+
+    <!-- TASKS -->
+    <section id="tasks" class="panel">
+      <div class="panel-head">
+        <h2>Daily Tasks</h2>
+        <input id="tasksDate" type="date" class="date-input" />
+      </div>
+
+      <form id="taskForm" class="card">
+        <div class="form-grid">
+          <input name="task_name" placeholder="Task name" required />
+          <select name="environment"><option value="test">test</option><option value="dev">dev</option><option value="qa">qa</option><option value="production">production</option></select>
+          <input name="entry_time" type="datetime-local" />
+          <input name="due_date" type="date" title="Due date (optional)" />
+          <input name="who_asked" placeholder="Who asked?" />
+          <select name="priority"><option value="low">low</option><option value="medium" selected>medium</option><option value="high">high</option></select>
+          <select name="assigned_to" class="assign-select" title="Assign to"></select>
+          <textarea name="todo_description" placeholder="To-do description" rows="1"></textarea>
+        </div>
+        <div class="form-extras">
+          <div class="extra-field" data-tagpicker="taskTags"></div>
+          <div class="extra-field prereq-field">
+            <label class="tp-label">⛓ Prerequisite task (optional) — becomes this task's parent</label>
+            <select id="taskPrereq" class="prereq-select"></select>
+          </div>
+          <div class="extra-field" data-recur="taskRecur"></div>
+        </div>
+        <button type="submit" class="btn primary"><i data-lucide="plus"></i> Add Task</button>
+      </form>
+
+      <div id="dueBar" class="due-bar"></div>
+
+      <div class="filters">
+        <select id="filterPriority"><option value="">All priorities</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>
+        <select id="filterStatus"><option value="">All statuses</option><option value="pending">pending</option><option value="in-progress">in-progress</option><option value="done">done</option></select>
+        <span id="taskTagFilter" class="active-tag-filter hidden"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table id="tasksTable">
+          <thead><tr><th>Task</th><th>Env</th><th>Time</th><th>Due</th><th>Who</th><th>Assignee</th><th>Priority</th><th>Tags</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PIPELINES (per-environment checklist) -->
+    <section id="pipelines" class="panel">
+      <div class="panel-head"><h2>Pipelines</h2></div>
+      <div class="env-tabs" id="pipeEnvTabs">
+        <button class="env-tab active" data-env="dev">dev</button>
+        <button class="env-tab" data-env="test">test</button>
+        <button class="env-tab" data-env="qa">qa</button>
+        <button class="env-tab" data-env="production">production</button>
+      </div>
+      <div id="pipeChecklist" class="checklist"></div>
+    </section>
+
+    <!-- MAINTENANCE -->
+    <section id="maintenance" class="panel">
+      <div class="panel-head"><h2>Maintenance</h2></div>
+      <form id="maintenanceForm" class="card">
+        <div class="form-grid">
+          <select name="environment"><option value="test">test</option><option value="qa">qa</option><option value="production">production</option></select>
+          <input name="release_version" placeholder="Release version" />
+          <input name="date" type="date" />
+          <textarea name="notes" placeholder="Notes" rows="1"></textarea>
+        </div>
+        <div class="form-extras">
+          <div class="extra-field" data-tagpicker="mntTags"></div>
+          <div class="extra-field" data-recur="mntRecur"></div>
+        </div>
+        <button type="submit" class="btn primary"><i data-lucide="plus"></i> Log Entry</button>
+      </form>
+
+      <div class="filters"><span id="mntTagFilter" class="active-tag-filter hidden"></span></div>
+      <div class="table-wrap">
+        <table id="maintenanceTable">
+          <thead><tr><th>Date</th><th>Env</th><th>Release</th><th>Tags</th><th>Notes</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- POCs -->
+    <section id="pocs" class="panel">
+      <div class="panel-head"><h2>POC Tracker</h2></div>
+      <form id="pocForm" class="card">
+        <div class="form-grid">
+          <input name="title" placeholder="POC title" required />
+          <textarea name="concept_description" placeholder="Concept description" rows="1"></textarea>
+        </div>
+        <div class="form-extras">
+          <div class="extra-field" data-tagpicker="pocTags"></div>
+          <div class="extra-field" data-parentpicker="pocParent"></div>
+        </div>
+        <button type="submit" class="btn primary"><i data-lucide="plus"></i> Add POC</button>
+      </form>
+      <div class="filters"><span id="pocTagFilter" class="active-tag-filter hidden"></span></div>
+      <div id="pocCards" class="cards"></div>
+    </section>
+
+    <!-- TIMELINE -->
+    <section id="timeline" class="panel">
+      <div class="panel-head">
+        <h2>Daily Timeline</h2>
+        <div class="timeline-controls">
+          <input id="timelineDate" type="date" />
+          <button id="exportHtml" class="btn">Export HTML</button>
+          <button id="exportTxt" class="btn">Export TXT</button>
+        </div>
+      </div>
+      <div id="summaryStats" class="stats"></div>
+      <div class="chips">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="checklist">Checklist</button>
+        <button class="chip" data-filter="task">Tasks</button>
+        <button class="chip" data-filter="pipeline">Pipelines</button>
+        <button class="chip" data-filter="maintenance">Maintenance</button>
+        <button class="chip" data-filter="poc">POCs</button>
+      </div>
+      <div id="timelineList" class="timeline"></div>
+    </section>
+
+    <!-- DEPENDENCY GRAPH -->
+    <section id="graph" class="panel">
+      <div class="panel-head">
+        <h2>Dependency Graph</h2>
+        <div class="head-controls">
+          <span id="graphTitle" class="muted"></span>
+          <button id="graphBack" class="btn hidden">← Full graph</button>
+          <button id="graphRefresh" class="btn">Refresh</button>
+        </div>
+      </div>
+      <p class="muted">Click a node to focus its sub-graph. Drag an arrow from one node onto another to make the first the <strong>parent</strong> of the second. Colored by status.</p>
+      <div id="graphWrap" class="graph-wrap"></div>
+    </section>
+
+    <!-- RECURRING -->
+    <section id="recurring" class="panel">
+      <div class="panel-head"><h2>Recurring Rules</h2></div>
+      <div id="recurringList" class="cards"></div>
+    </section>
+
+    <!-- TAGS LIBRARY -->
+    <section id="tags" class="panel">
+      <div class="panel-head"><h2>Tag Library</h2></div>
+      <form id="tagForm" class="card form-grid">
+        <input name="name" placeholder="tag name (e.g. postgres-staging)" required />
+        <select name="category">
+          <option value="server">server</option><option value="service">service</option>
+          <option value="database">database</option><option value="region">region</option>
+          <option value="cluster">cluster</option><option value="network">network</option>
+          <option value="custom" selected>custom</option>
+        </select>
+        <input name="color" type="color" value="#7aa2ff" />
+        <input name="description" placeholder="Description" />
+        <button type="submit" class="btn primary"><i data-lucide="plus"></i> Create Tag</button>
+      </form>
+      <div id="tagLibrary" class="tag-library"></div>
+    </section>
+
+    <!-- TAGS OVERVIEW -->
+    <section id="tagsOverview" class="panel">
+      <div class="panel-head"><h2>Tag Overview</h2></div>
+      <div class="table-wrap">
+        <table id="tagOverviewTable">
+          <thead><tr><th>Tag</th><th>Category</th><th>Open</th><th>Closed</th><th>Total</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- AUDIT LOG -->
+    <section id="audit" class="panel">
+      <div class="panel-head"><h2>Audit Log</h2></div>
+      <div class="filters">
+        <select id="auditType"><option value="">All entities</option><option value="task">task</option><option value="pipeline">pipeline</option><option value="maintenance">maintenance</option><option value="poc">poc</option><option value="checklist">checklist</option></select>
+        <input id="auditActor" placeholder="actor" />
+        <input id="auditFrom" type="date" class="date-input" />
+        <input id="auditTo" type="date" class="date-input" />
+        <input id="auditQ" placeholder="search reason…" />
+        <button id="auditSearch" class="btn">Filter</button>
+      </div>
+      <div class="table-wrap">
+        <table id="auditTable">
+          <thead><tr><th>When</th><th>Entity</th><th>Action</th><th>Change</th><th>Reason</th><th>Actor</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Reason modal -->
+  <div id="reasonModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3 id="reasonTitle">Why this change?</h3>
+      <textarea id="reasonText" rows="3" placeholder="Explain the reason (required)…"></textarea>
+      <div id="reasonError" class="modal-err hidden">A reason is required.</div>
+      <div class="modal-actions">
+        <button id="reasonCancel" class="btn">Cancel</button>
+        <button id="reasonOk" class="btn primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit task modal -->
+  <div id="editModal" class="modal-backdrop hidden">
+    <div class="modal modal-wide">
+      <h3>Edit Task</h3>
+      <form id="editForm" class="edit-form">
+        <label>Task name<input name="task_name" required /></label>
+        <div class="edit-row">
+          <label>Environment<select name="environment"><option value="test">test</option><option value="dev">dev</option><option value="qa">qa</option><option value="production">production</option></select></label>
+          <label>Priority<select name="priority"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select></label>
+          <label>Due date<input name="due_date" type="date" /></label>
+          <label>Assignee<select name="assigned_to" class="assign-select"></select></label>
+        </div>
+        <label>Who asked<input name="who_asked" /></label>
+        <label>Description<textarea name="todo_description" rows="2"></textarea></label>
+        <label>Tags<div class="extra-field" data-tagpicker="editTags"></div></label>
+      </form>
+      <div class="modal-actions">
+        <button id="editCancel" class="btn">Cancel</button>
+        <button id="editSave" class="btn primary">Save changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History drawer -->
+  <div id="historyDrawer" class="drawer hidden">
+    <div class="drawer-head">
+      <h3 id="historyTitle">History</h3>
+      <button id="historyClose" class="btn">✕</button>
+    </div>
+    <div id="historyBody" class="drawer-body"></div>
+  </div>
+  <div id="drawerBackdrop" class="drawer-backdrop hidden"></div>
+
+  <div id="statusMenu" class="status-menu hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/vendor/lucide/lucide.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
